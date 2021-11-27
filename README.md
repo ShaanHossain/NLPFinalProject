@@ -42,4 +42,5 @@ To save the new requirements
 - nltk
 - tensorflow
 - keras
+- gensim
 
