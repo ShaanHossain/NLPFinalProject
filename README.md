@@ -27,3 +27,9 @@ Then
 `python3 -m pip freeze`
 
 To save the new requirements
+
+## Libraries we installed:
+
+- numpy
+- nltk
+- tensorflow
