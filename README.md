@@ -32,7 +32,7 @@ Install requirements using pip3 install ...
 
 Then 
 
-`python3 -m pip freeze`
+`python3 -m pip freeze > requirements.txt`
 
 To save the new requirements
 
