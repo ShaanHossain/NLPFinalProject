@@ -1,6 +1,14 @@
 # How to get the libaries installed correctly
 
+https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/
+
 ## For MacOS:
+
+Make sure to use python3 or python depending on what they are mapped to. Should be running python version 3.9.7
+
+Install Virtualenv
+
+python3 -m pip install --user virtualenv
 
 Create a virtual environment
 
@@ -33,3 +41,5 @@ To save the new requirements
 - numpy
 - nltk
 - tensorflow
+- keras
+
