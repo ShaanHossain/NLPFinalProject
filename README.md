@@ -43,4 +43,5 @@ To save the new requirements
 - tensorflow
 - keras
 - gensim
-
+- pandas
+- sklearn
