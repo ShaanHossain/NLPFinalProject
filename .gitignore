@@ -1,2 +1,4 @@
 venv
 .vscode
+utils/glove.twitter.27B.50d.txt
+.DS_Store
