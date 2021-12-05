@@ -12,7 +12,7 @@ import numpy as np
 # Determines which dataset use and how much to use :
 # HateSpeech: Column-0 : Sentence, Column-1 : Label [noHate-0, Hate-1]
 # either 'HateSpeech' or 'KaggleTwitter' or 'TDavidson'
-dataset_to_use = "HateSpeech"
+dataset_to_use = "KaggleTwitter"
 dataset_percentage = 100  # percentage range 1 to 100
 
 # Initializes file path, column of csv file to parse and
@@ -29,16 +29,15 @@ if dataset_to_use == "HateSpeech":
     sentence_column_to_parse = 0
     label_column_to_parse = 1
 elif dataset_to_use == "KaggleTwitter":
-    training_file = "datasets/kaggle-twitter/train.csv"
-    test_file = "datasets/kaggle-twitter/test.csv"
-    sentence_column_to_parse = 2
+    training_file = "datasets/kaggle-twitter/newtrain.csv"
+    test_file = "datasets/kaggle-twitter/newtest.csv"
+    sentence_column_to_parse = 0
     label_column_to_parse = 1
 elif dataset_to_use == "TDavidson":
-    training_file = "datasets/t-davidson-hate-speech/labeled_data.csv"
-    # TODO: Update test path for this dataset
-    # test_file = "datasets/kaggle-twitter/test.csv"
-    sentence_column_to_parse = 6
-    label_column_to_parse = 2
+    training_file = "datasets/t-davidson-hate-speech/train.csv"
+    test_file = "datasets/t-davidson-hate-speech/test.csv"
+    sentence_column_to_parse = 0
+    label_column_to_parse = 1
 else:
     print("Invalid Dataset specified")
     sys.exit(1)
@@ -101,8 +100,16 @@ def parse_data(training_file_path: str, percentage: int,
                 read_sentences.append(row[sentence_column])
                 label_sentences.append(row[label_column])
         end_of_data = int(len(read_sentences) * percentage * .01)
-        percentage_sentences = read_sentences[0:end_of_data]
-        percentage_labels = label_sentences[0:end_of_data]
+
+        zipped = np.array(list(zip(read_sentences,label_sentences)))
+        idx = [i for i in range(zipped.shape[0])]
+
+        rng = np.random.default_rng(15)
+        rand_idx = rng.choice(idx, size=end_of_data, replace=False)
+        percentage_zipped = np.array([zipped[j] for j in rand_idx])
+
+        percentage_sentences = percentage_zipped[:,0]
+        percentage_labels = percentage_zipped[:,1]
     return percentage_sentences, percentage_labels
 
 
