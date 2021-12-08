@@ -8,9 +8,10 @@ from typing import List
 from nltk.tokenize import RegexpTokenizer
 from gensim.parsing.preprocessing import remove_stopwords, strip_punctuation
 import numpy as np
-import inflect
-from nltk.stem import LancasterStemmer
-
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.losses import BinaryCrossentropy as bc
+from keras.regularizers import l2
 
 # Determines which dataset use and how much to use :
 # HateSpeech: Column-0 : Sentence, Column-1 : Label [noHate-0, Hate-1]
@@ -24,7 +25,6 @@ training_file = ""
 test_file = ""
 sentence_column_to_parse = None
 label_column_to_parse = None
-lancaster = LancasterStemmer()
 delimiter = ","
 if dataset_to_use == "HateSpeech":
     training_file = "datasets/hate-speech/train.txt"
@@ -47,44 +47,13 @@ else:
     sys.exit(1)
 
 
-def replace_numbers(words):
-    """Replace all interger occurrences in list of tokenized words
-    with textual representation"""
-    p = inflect.engine()
-    new_words = []
-    for word in words:
-        if word.isdigit():
-            new_word = p.number_to_words(word)
-            new_words.append(new_word)
-        else:
-            new_words.append(word)
-    return new_words
-
-
-def stem_words(words: List[str]) -> List[str]:
-    """Stems the given words
-
-    Args:
-        words (list): words to be stemmed
-
-    Returns:
-        str: stemmed words
-    """
-    stemmed_words = []
-    for word in words:
-        stemmed_words.append(lancaster.stem(word))
-    return stemmed_words
-
-
 def preprocessing(running_lines: List[str]) -> List[str]:
     """This function takes in the running test and return back the
-    preprocessed text. Six tasks are done as part of this:
+    preprocessed text. Four tasks are done as part of this:
       1. lower word case
       2. remove stopwords
       3. remove punctuation
-      4. convert numbers to texts
-      5. perform stemming
-      6. Add - <s> and </s> for every sentence
+      4. Add - <s> and </s> for every sentence
 
     Args:
         running_lines (List[str]): list of lines
@@ -95,17 +64,10 @@ def preprocessing(running_lines: List[str]) -> List[str]:
     preprocessed_lines = []
     tokenizer = RegexpTokenizer(r"\w+")
     for line in running_lines:
-        # lower case
         lower_case_data = line.lower()
-        # remove stop words
         data_without_stop_word = remove_stopwords(lower_case_data)
-        # remove punctunation
         data_without_punct = strip_punctuation(data_without_stop_word)
         processed_data = tokenizer.tokenize(data_without_punct)
-        # replace numbers '1' to 'one'
-        processed_data = replace_numbers(processed_data)
-        # stem words
-        processed_data = stem_words(processed_data)
         processed_data.insert(0, "<s>")
         processed_data.append("</s>")
         preprocessed_lines.append(" ".join(processed_data))
@@ -336,33 +298,45 @@ train_sentences, train_labels = parse_data(training_file,
                                            delimiter)
 # parse and preprocess the data
 processed_train_sentences = preprocessing(train_sentences)
-# verify the processed sentences
-# for sentence in sentences:
-#     print(sentence)
-# This is the baseline classifier
-print(
-    f"Performing Baseline - Logistic Classifier on {dataset_to_use}"
-    f" with {dataset_percentage} % data ")
-baseline_classifier = LogisticClassifier()
-baseline_classifier.train(processed_train_sentences, train_labels)
-baseline_predicted_labels = []
-# test the model
+
+logclass = LogisticClassifier()
+featurized_train = [logclass.featurize(s) for s in processed_train_sentences]
+train_labels = [int(x) for x in train_labels]
+# print(featurized_train)
+
+poscount = sum(train_labels)
+negcount = len(train_labels) - poscount
+posweight = 1./poscount
+negweight = 1./negcount
+
+classwt = {0: negweight, 1:posweight}
+
+model = Sequential()
+model.add(Dense(1, input_dim=4, activation='sigmoid', kernel_regularizer=l2()))
+model.compile(optimizer="adam", loss=bc())
+model.fit(featurized_train,train_labels,epochs=20,class_weight=classwt)
+
 test_sentences, baseline_gold_labels = parse_data(
     test_file, dataset_percentage,
     sentence_column_to_parse,
     label_column_to_parse, delimiter)
-# parse and preprocess the data
+
 processed_test_sentences = preprocessing(test_sentences)
-for test_sentence in processed_test_sentences:
-    baseline_predicted_label = baseline_classifier.classify(
-        test_sentence)
-    baseline_predicted_labels.append(baseline_predicted_label)
-# report precision, recall, f1
+featurized_test = [logclass.featurize(s) for s in processed_test_sentences]
+# baseline_gold_labels = [int(x) for x in baseline_gold_labels]
+
+pred_labels_probs = model.predict(featurized_test)
+pred_labels = []
+for a in pred_labels_probs:
+    if a[0] > .5:
+        pred_labels.append("1")
+    else:
+        pred_labels.append("0")
+
 precision_value = precision(baseline_gold_labels,
-                            baseline_predicted_labels)
+                            pred_labels)
 print(f"Precision: {precision_value}")
-recall_value = recall(baseline_gold_labels, baseline_predicted_labels)
+recall_value = recall(baseline_gold_labels, pred_labels)
 print(f"Recall: {recall_value}")
-f1_value = f1(baseline_gold_labels, baseline_predicted_labels)
+f1_value = f1(baseline_gold_labels, pred_labels)
 print(f"F1 Score: {f1_value}")
-# This is the neural lm classifier
