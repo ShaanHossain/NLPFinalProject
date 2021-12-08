@@ -11,6 +11,7 @@ from nltk.stem import WordNetLemmatizer
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
+import keras
 from keras.models import Sequential
 from keras.layers import Dropout, Dense, Embedding, LSTM, Bidirectional
 from sklearn.model_selection import train_test_split
@@ -214,10 +215,63 @@ embedding_size = len(X_train_Glove_s[0])
 # print("\n Word index of the word testing is : ", word_index_s["industry"])
 # print("\n Embedding for thw word want \n \n", embeddings_dict_s["want"])
 
-def build_bilstm(word_index, embeddings_dict, nclasses,  MAX_SEQUENCE_LENGTH, EMBEDDING_DIM=50, dropout=0.5, hidden_layer = 3, lstm_node = 32):
+'''
+1. Number of BiLSTM layers
+2. Number of nodes per BiLSTM layer
+3. Number of nodes in dense layer right after BiLSTM/Dropout layers aka main computation matrix
+4. Dropout for inputs to BiLSTM layers (percentage to drop inputs from previous layer)
+5. Recurrent dropout in BiLSTM layers
+6. Dropout in dropout layer right after BiLSTM layers  (percentage to drop from BiLSTM outputs)
+7. Weight Initialization - Nope, set a random seed and fix it
+8. Decay rate for optimizer (slowly lower learning rate)
+9. Learning rate for optimizer
+10. Which optimizer to use - Nope
+11. Which loss function to use - Nope
+12. Momentum - This only applies if we use SGD - Let's not
+13. Epochs - Definitely
+14. Batch size
+15. Activation Function - Let's experiment ourselves then fix it
+16. Embedding dimension
+
+EMBEDDING_DIM=50, 
+dropout=0.5, 
+hidden_layer = 3, 
+lstm_node = 32):
+
+model = build_bilstm(
+    word_index=word_index_s, 
+    embeddings_dict=embeddings_dict_s, 
+    embedding_dim=50, 
+    num_hidden_layers=3, 
+    num_nodes_per_hidden_layer=32,  
+    num_nodes_final_fc_layer=256,
+    input_dropout=0,
+    recurrent_dropout=.2,
+    output_dropout=.5,
+    learning_rate=.1,
+    max_sequence_length=embedding_size
+    )
+
+'''
+
+def build_bilstm(
+    word_index, 
+    embeddings_dict,   
+    embedding_dim,
+    num_hidden_layers,
+    num_nodes_per_hidden_layer,
+    num_nodes_final_fc_layer,
+    input_dropout,
+    recurrent_dropout,
+    output_dropout,
+    learning_rate,
+    max_sequence_length, 
+    nclasses=2
+    ):
+
     model = Sequential()
     # Make the embedding matrix using the embedding_dict
-    embedding_matrix = np.random.random((len(word_index) + 1, EMBEDDING_DIM))
+    embedding_matrix = np.random.random((len(word_index) + 1, embedding_dim))
     for word, i in word_index.items():
         embedding_vector = embeddings_dict.get(word)
         if embedding_vector is not None:
@@ -225,44 +279,49 @@ def build_bilstm(word_index, embeddings_dict, nclasses,  MAX_SEQUENCE_LENGTH, EM
             if len(embedding_matrix[i]) != len(embedding_vector):
                 print("could not broadcast input array from shape", str(len(embedding_matrix[i])),
                       "into shape", str(len(embedding_vector)), " Please make sure your"
-                                                                " EMBEDDING_DIM is equal to embedding_vector file ,GloVe,")
+                                                                " embedding_dim is equal to embedding_vector file ,GloVe,")
                 exit(1)
             embedding_matrix[i] = embedding_vector
             
     # Add embedding layer
     model.add(Embedding(len(word_index) + 1,
-                                EMBEDDING_DIM,
+                                embedding_dim,
                                 weights=[embedding_matrix],
-                                input_length=MAX_SEQUENCE_LENGTH,
+                                input_length=max_sequence_length,
                                 trainable=True))
     # Add hidden layers 
-    for i in range(0,hidden_layer):
+    for i in range(0,num_hidden_layers):
         # Add a bidirectional lstm layer
-        model.add(Bidirectional(LSTM(lstm_node, return_sequences=True, recurrent_dropout=0.2)))
+        model.add(Bidirectional(LSTM(num_nodes_per_hidden_layer, return_sequences=True, recurrent_dropout=recurrent_dropout, dropout=input_dropout)))
         # Add a dropout layer after each lstm layer
-        model.add(Dropout(dropout))
-    model.add(Bidirectional(LSTM(lstm_node, recurrent_dropout=0.2)))
-    model.add(Dropout(dropout))
+        model.add(Dropout(output_dropout))
+    model.add(Bidirectional(LSTM(num_nodes_per_hidden_layer, recurrent_dropout=recurrent_dropout, dropout=input_dropout)))
+    model.add(Dropout(output_dropout))
     # Add the fully connected layer with 256 nurons and relu activation
-    model.add(Dense(256, activation='relu'))
+    model.add(Dense(num_nodes_final_fc_layer, activation='relu'))
     # Add the output layer with softmax activation since we have 2 classes
     model.add(Dense(nclasses, activation='softmax'))
     # Compile the model using sparse_categorical_crossentropy
+    opt = keras.optimizers.Adam(learning_rate=learning_rate)
     model.compile(loss='sparse_categorical_crossentropy',
-                      optimizer='adam',
+                      optimizer=opt ,
                       metrics=['accuracy'])
     return model
 
-def plot_graphs(axs, graph_index, history, string):
-  axs[graph_index].plot(history.history[string])
-  axs[graph_index].plot(history.history['val_'+string], '')
-  axs[graph_index].xlabel("Epochs")
-  axs[graph_index].ylabel(string)
-  axs[graph_index].legend([string, 'val_'+string])
-  axs[graph_index].show()
-
 print("Building Model!")
-model = build_bilstm(word_index_s, embeddings_dict_s, 2, embedding_size)
+model = build_bilstm(
+    word_index=word_index_s, 
+    embeddings_dict=embeddings_dict_s, 
+    embedding_dim=50, 
+    num_hidden_layers=3, 
+    num_nodes_per_hidden_layer=32,  
+    num_nodes_final_fc_layer=256,
+    input_dropout=0,
+    recurrent_dropout=.2,
+    output_dropout=.5,
+    learning_rate=.1,
+    max_sequence_length=embedding_size)
+
 model.summary()
 
 print("Training the model")
@@ -274,7 +333,60 @@ data_history = model.fit(np.array(X_train), np.array(y_train),
                            batch_size=128,
                            verbose=1)
 
-fig, axs = plt.subplots(2)
+def plot_graphs(axs, graph_index, history, string):
+    axs[graph_index].plot(history.history[string])
+    axs[graph_index].plot(history.history['val_'+string], '')
+    # axs[graph_index].xlabel("Epochs")
+    # axs[graph_index].ylabel(string)
+    axs[graph_index].set(xlabel="Epochs", ylabel=string)
+    axs[graph_index].legend([string, 'val_'+string])
+    # axs[graph_index].show()
 
+fig, axs = plt.subplots(2, figsize=(15, 15))
+                        
 plot_graphs(axs, 0, data_history, 'accuracy')
 plot_graphs(axs, 1, data_history, 'loss')
+
+
+'''
+
+1. Number of BiLSTM layers
+2. Number of nodes per BiLSTM layer
+3. Number of nodes in dense layer right after BiLSTM/Dropout layers aka main computation matrix
+4. Dropout for inputs to BiLSTM layers (percentage to drop inputs from previous layer)
+5. Recurrent dropout in BiLSTM layers
+6. Dropout in dropout layer right after BiLSTM layers  (percentage to drop from BiLSTM outputs)
+7. Weight Initialization - Nope, set a random seed and fix it
+8. Decay rate for optimizer (slowly lower learning rate)
+9. Learning rate for optimizer
+10. Which optimizer to use - Nope
+11. Which loss function to use - Nope
+12. Momentum - This only applies if we use SGD - Let's not
+13. Epochs - Definitely
+14. Batch size
+15. Activation Function - Let's experiment ourselves then fix it
+16. Embedding dimension
+
+The ones we want to look at:
+1. Number of BiLSTM layers
+2. Number of nodes per BiLSTM layer
+3. Epochs
+4. Learning rate
+5. Embedding dimension
+
+Momentum explanation:
+
+Momentum see here is a similar attempt to maintain a consistent direction. If we're taking smaller steps, it also makes sense to maintain a somewhat consistent heading through our space. We take a linear combination of the previous heading vector, and the newly-computed gradient vector, and adjust in that direction. For instance, if we have a momentum of 0.90, we will take 90% of the previous direction plus 10% of the new direction, and adjust weights accordingly -- multiplying that direction vector by the learning rate.
+
+'''
+
+# 1. NUMBER OF NODES AND HIDDEN LAYERS
+# 2. NUMBER OF UNITS IN A DENSE LAYER
+# 3. DROPOUT
+# 4. WEIGHT INITIALIZATION
+# 5. DECAY RATE
+# 6. ACTIVATION FUNCTION
+# 7. LEARNING RATE
+# 8. MOMENTUM
+# 9. NUMBER OF EPOCHS
+# 10. BATCH SIZE
