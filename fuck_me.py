@@ -370,7 +370,6 @@ plot_graphs(axs, 1, data_history, 'loss')
 The ones we want to look at:
 1. Number of BiLSTM layers
 2. Number of nodes per BiLSTM layer
-3. Epochs
 4. Learning rate
 5. Embedding dimension
 
